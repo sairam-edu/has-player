@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HLS Quality Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --text: #123047;
+      --muted: #5f7181;
+      --accent: #0e7a86;
+      --border: #d7e2ea;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #eef5fb 0%, #f8fbfd 100%);
+      color: var(--text);
+    }
+
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(18, 48, 71, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .field {
+      flex: 1 1 420px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .button-field {
+      flex: 0 0 180px;
+      align-self: end;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 16px;
+      background: #000;
+      margin-top: 8px;
+    }
+
+    .status {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border: 1px solid var(--border);
+      background: #f8fbfd;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+      <h1>HLS Quality Demo</h1>
+      <p>This page proves manual quality switching for your existing HLS master manifest. Browsers do not show these controls automatically; your frontend has to render them.</p>
+
+      <div class="row">
+        <div class="field">
+          <label for="manifestUrl">HLS master manifest URL</label>
+          <input id="manifestUrl" type="text" placeholder="https://.../video/hls/master.m3u8" />
+        </div>
+        <div class="button-field">
+          <label>&nbsp;</label>
+          <button id="loadButton" type="button">Load Stream</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="qualitySelect">Quality</label>
+          <select id="qualitySelect" disabled>
+            <option value="-1">Auto</option>
+          </select>
+        </div>
+      </div>
+
+      <video id="video" controls playsinline></video>
+      <div class="chips" id="levels"></div>
+      <div class="status" id="status">Idle</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
+  <script>
+    const manifestUrlInput = document.getElementById("manifestUrl");
+    const loadButton = document.getElementById("loadButton");
+    const qualitySelect = document.getElementById("qualitySelect");
+    const video = document.getElementById("video");
+    const status = document.getElementById("status");
+    const levelsContainer = document.getElementById("levels");
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("src")) {
+      manifestUrlInput.value = params.get("src");
+    }
+
+    let hls = null;
+
+    function setStatus(message) {
+      status.textContent = message;
+    }
+
+    function clearLevels() {
+      levelsContainer.innerHTML = "";
+      qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+      qualitySelect.disabled = true;
+    }
+
+    function renderLevels(levels) {
+      clearLevels();
+      qualitySelect.disabled = false;
+
+      levels.forEach((level, index) => {
+        const label = level.height ? `${level.height}p` : `Level ${index}`;
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = label;
+        qualitySelect.appendChild(option);
+
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.textContent = `${label} • ${Math.round((level.bitrate || 0) / 1000)} kbps`;
+        levelsContainer.appendChild(chip);
+      });
+    }
+
+    function destroyPlayer() {
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      video.removeAttribute("src");
+      video.load();
+      clearLevels();
+    }
+
+    function loadWithHlsJs(url) {
+      hls = new Hls({
+        capLevelToPlayerSize: false,
+        startLevel: -1
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        renderLevels(hls.levels);
+        setStatus(`Loaded manifest with ${data.levels.length} quality levels. Default mode is Auto.`);
+        video.play().catch(() => {});
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+        const current = data.level;
+        const label = current >= 0 && hls.levels[current] ? `${hls.levels[current].height}p` : "Auto";
+        setStatus(`Current playback quality: ${label}`);
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        setStatus(`HLS error: ${data.type} / ${data.details}`);
+      });
+    }
+
+    function loadStream() {
+      const url = manifestUrlInput.value.trim();
+      if (!url) {
+        setStatus("Enter a master manifest URL first.");
+        return;
+      }
+
+      destroyPlayer();
+
+      if (window.Hls && Hls.isSupported()) {
+        loadWithHlsJs(url);
+        return;
+      }
+
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        video.addEventListener("loadedmetadata", () => {
+          setStatus("Loaded with native HLS playback. Manual quality switching is usually not exposed by native browser controls.");
+        }, { once: true });
+        return;
+      }
+
+      setStatus("This browser cannot play HLS in this test page.");
+    }
+
+    loadButton.addEventListener("click", loadStream);
+
+    qualitySelect.addEventListener("change", () => {
+      if (!hls) {
+        setStatus("Manual quality switching needs hls.js in this demo.");
+        return;
+      }
+
+      const selected = Number(qualitySelect.value);
+      hls.currentLevel = selected;
+      if (selected === -1) {
+        setStatus("Switched to Auto quality.");
+      } else {
+        const level = hls.levels[selected];
+        setStatus(`Requested ${level.height}p quality.`);
+      }
+    });
+
+    if (manifestUrlInput.value) {
+      loadStream();
+    }
+  </script>
+</body>
+</html>
