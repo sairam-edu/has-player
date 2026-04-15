@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HLS Quality</title>
+  <title>HLS Quality Demo (Mobile Optimized)</title>
   
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
   
@@ -79,7 +79,7 @@
     .video-container {
       margin-top: 16px;
       border-radius: 16px;
-      overflow: hidden;
+      /* Removed overflow: hidden as it can sometimes pinch Android fullscreen */
       background: #000;
       --plyr-color-main: var(--accent);
     }
@@ -96,7 +96,7 @@
 <div class="page">
   <div class="card">
     <h1>HLS Quality Demo</h1>
-    <p>This demo uses <strong>Plyr</strong> to integrate manual quality switching and <strong>Picture-in-Picture</strong> controls directly into the video player.</p>
+    <p>This version includes mobile device detection to route iOS and Android devices to their optimal fullscreen and PiP handlers.</p>
  
     <div class="row">
       <div class="field">
@@ -166,10 +166,9 @@
       }
     }
 
-    // Shared Plyr controls configuration so Native and HLS.js use the same layout
     const plyrControls = [
       'play-large', 'play', 'progress', 'current-time', 
-      'mute', 'volume', 'settings', 'pip', 'fullscreen' // <-- Added 'pip' right here
+      'mute', 'volume', 'settings', 'pip', 'fullscreen' 
     ];
 
     function loadWithHlsJs(url) {
@@ -194,12 +193,12 @@
             forced: true,
             onChange: (e) => updateQuality(e)
           },
-          i18n: {
-            qualityLabel: { 0: 'Auto' }
-          }
+          i18n: { qualityLabel: { 0: 'Auto' } },
+          // Crucial fix for Mobile:
+          fullscreen: { iosNative: true }
         });
 
-        setStatus(`Loaded manifest with ${data.levels.length} quality levels. Click the Gear icon ⚙️ or PiP icon.`);
+        setStatus(`Loaded manifest with ${data.levels.length} quality levels.`);
         video.play().catch(() => {});
       });
  
@@ -222,18 +221,28 @@
       }
  
       destroyPlayer();
+
+      // Accurately detect iOS devices (including iPads that pretend to be Macs)
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                    (navigator.userAgent.includes("Mac") && "ontouchend" in document);
  
-      if (window.Hls && Hls.isSupported()) {
+      // Only run HLS.js if it's supported AND the device is NOT an Apple mobile device
+      if (window.Hls && Hls.isSupported() && !isIOS) {
         loadWithHlsJs(url);
         return;
       }
  
+      // Native Apple Fallback
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
-        // Make sure the native fallback also gets the PiP button
-        player = new Plyr(video, { controls: plyrControls }); 
+        
+        player = new Plyr(video, { 
+            controls: plyrControls,
+            fullscreen: { iosNative: true } // Let iPhone use its native fullscreen
+        }); 
+
         video.addEventListener("loadedmetadata", () => {
-          setStatus("Loaded with native HLS playback. Quality is managed automatically by your browser.");
+          setStatus("Loaded with Apple native playback. Quality and PiP are managed by your OS.");
         }, { once: true });
         video.play().catch(() => {});
         return;
