@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HLS Quality Demo (Inside Player)</title>
+  <title>HLS Quality</title>
   
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
   
@@ -81,7 +81,6 @@
       border-radius: 16px;
       overflow: hidden;
       background: #000;
-      /* Fix for Plyr inheriting standard borders */
       --plyr-color-main: var(--accent);
     }
 
@@ -97,7 +96,7 @@
 <div class="page">
   <div class="card">
     <h1>HLS Quality Demo</h1>
-    <p>This demo uses <strong>Plyr</strong> to integrate the manual quality switching directly into the video player's settings menu, keeping it accessible in fullscreen.</p>
+    <p>This demo uses <strong>Plyr</strong> to integrate manual quality switching and <strong>Picture-in-Picture</strong> controls directly into the video player.</p>
  
     <div class="row">
       <div class="field">
@@ -133,7 +132,7 @@
     }
  
     let hls = null;
-    let player = null; // Plyr instance
+    let player = null; 
  
     function setStatus(message) {
       status.textContent = message;
@@ -155,10 +154,9 @@
     function updateQuality(newQuality) {
       if (!hls) return;
       if (newQuality === 0) {
-        hls.currentLevel = -1; // -1 is Auto in hls.js
+        hls.currentLevel = -1; 
         setStatus("Switched to Auto quality.");
       } else {
-        // Find the index of the level that matches the selected height
         hls.levels.forEach((level, levelIndex) => {
           if (level.height === newQuality) {
             hls.currentLevel = levelIndex;
@@ -167,6 +165,12 @@
         });
       }
     }
+
+    // Shared Plyr controls configuration so Native and HLS.js use the same layout
+    const plyrControls = [
+      'play-large', 'play', 'progress', 'current-time', 
+      'mute', 'volume', 'settings', 'pip', 'fullscreen' // <-- Added 'pip' right here
+    ];
 
     function loadWithHlsJs(url) {
       hls = new Hls({
@@ -178,16 +182,14 @@
       hls.attachMedia(video);
  
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        // 1. Extract available resolutions (heights) from the manifest
         const availableQualities = hls.levels.map(l => l.height);
-        availableQualities.unshift(0); // Prepend 0 to represent 'Auto'
+        availableQualities.unshift(0); 
 
-        // 2. Initialize Plyr and pass in our custom quality options
         player = new Plyr(video, {
-          controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'],
+          controls: plyrControls,
           settings: ['quality'],
           quality: {
-            default: 0, // Auto
+            default: 0, 
             options: availableQualities,
             forced: true,
             onChange: (e) => updateQuality(e)
@@ -197,7 +199,7 @@
           }
         });
 
-        setStatus(`Loaded manifest with ${data.levels.length} quality levels. Click the Gear icon ⚙️ in the player.`);
+        setStatus(`Loaded manifest with ${data.levels.length} quality levels. Click the Gear icon ⚙️ or PiP icon.`);
         video.play().catch(() => {});
       });
  
@@ -226,10 +228,10 @@
         return;
       }
  
-      // Fallback for native HLS (like Safari on iOS) where manual selection isn't allowed via JS
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
-        player = new Plyr(video); // Init basic Plyr without custom quality configs
+        // Make sure the native fallback also gets the PiP button
+        player = new Plyr(video, { controls: plyrControls }); 
         video.addEventListener("loadedmetadata", () => {
           setStatus("Loaded with native HLS playback. Quality is managed automatically by your browser.");
         }, { once: true });
