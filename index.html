@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HLS Quality Demo</title>
+  <title>HLS Quality Demo (Inside Player)</title>
+  
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  
   <style>
     :root {
       color-scheme: light;
@@ -14,24 +17,22 @@
       --accent: #0e7a86;
       --border: #d7e2ea;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+ 
+    * { box-sizing: border-box; }
+ 
     body {
       margin: 0;
       font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: linear-gradient(180deg, #eef5fb 0%, #f8fbfd 100%);
       color: var(--text);
     }
-
+ 
     .page {
       max-width: 980px;
       margin: 0 auto;
       padding: 32px 20px 48px;
     }
-
+ 
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -39,39 +40,21 @@
       padding: 20px;
       box-shadow: 0 10px 30px rgba(18, 48, 71, 0.08);
     }
-
-    h1 {
-      margin: 0 0 8px;
-      font-size: 28px;
-    }
-
-    p {
-      margin: 0 0 16px;
-      color: var(--muted);
-      line-height: 1.5;
-    }
-
+ 
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+ 
     .row {
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
       margin-bottom: 16px;
     }
-
-    .field {
-      flex: 1 1 420px;
-    }
-
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-
-    input,
-    select,
-    button {
+ 
+    .field { flex: 1 1 420px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+ 
+    input, button {
       width: 100%;
       border-radius: 12px;
       border: 1px solid var(--border);
@@ -79,7 +62,7 @@
       font-size: 14px;
       background: #fff;
     }
-
+ 
     button {
       cursor: pointer;
       background: var(--accent);
@@ -87,17 +70,19 @@
       border-color: var(--accent);
       font-weight: 600;
     }
-
+ 
     .button-field {
       flex: 0 0 180px;
       align-self: end;
     }
-
-    video {
-      width: 100%;
+ 
+    .video-container {
+      margin-top: 16px;
       border-radius: 16px;
+      overflow: hidden;
       background: #000;
-      margin-top: 8px;
+      /* Fix for Plyr inheriting standard borders */
+      --plyr-color-main: var(--accent);
     }
 
     .status {
@@ -106,108 +91,81 @@
       color: var(--muted);
       white-space: pre-wrap;
     }
-
-    .chips {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 12px;
-    }
-
-    .chip {
-      border: 1px solid var(--border);
-      background: #f8fbfd;
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 12px;
-      color: var(--text);
-    }
   </style>
 </head>
 <body>
-  <div class="page">
-    <div class="card">
-      <h1>HLS Quality Demo</h1>
-      <p>This page proves manual quality switching for your existing HLS master manifest. Browsers do not show these controls automatically; your frontend has to render them.</p>
-
-      <div class="row">
-        <div class="field">
-          <label for="manifestUrl">HLS master manifest URL</label>
-          <input id="manifestUrl" type="text" placeholder="https://.../video/hls/master.m3u8" />
-        </div>
-        <div class="button-field">
-          <label>&nbsp;</label>
-          <button id="loadButton" type="button">Load Stream</button>
-        </div>
+<div class="page">
+  <div class="card">
+    <h1>HLS Quality Demo</h1>
+    <p>This demo uses <strong>Plyr</strong> to integrate the manual quality switching directly into the video player's settings menu, keeping it accessible in fullscreen.</p>
+ 
+    <div class="row">
+      <div class="field">
+        <label for="manifestUrl">HLS master manifest URL</label>
+        <input id="manifestUrl" type="text" placeholder="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" />
       </div>
-
-      <div class="row">
-        <div class="field">
-          <label for="qualitySelect">Quality</label>
-          <select id="qualitySelect" disabled>
-            <option value="-1">Auto</option>
-          </select>
-        </div>
+      <div class="button-field">
+        <label>&nbsp;</label>
+        <button id="loadButton" type="button">Load Stream</button>
       </div>
-
-      <video id="video" controls playsinline></video>
-      <div class="chips" id="levels"></div>
-      <div class="status" id="status">Idle</div>
     </div>
+ 
+    <div class="video-container">
+      <video id="video" controls playsinline></video>
+    </div>
+    
+    <div class="status" id="status">Idle</div>
   </div>
+</div>
+ 
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
+<script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
-  <script>
+<script>
     const manifestUrlInput = document.getElementById("manifestUrl");
     const loadButton = document.getElementById("loadButton");
-    const qualitySelect = document.getElementById("qualitySelect");
     const video = document.getElementById("video");
     const status = document.getElementById("status");
-    const levelsContainer = document.getElementById("levels");
-
+ 
     const params = new URLSearchParams(window.location.search);
     if (params.get("src")) {
       manifestUrlInput.value = params.get("src");
     }
-
+ 
     let hls = null;
-
+    let player = null; // Plyr instance
+ 
     function setStatus(message) {
       status.textContent = message;
     }
-
-    function clearLevels() {
-      levelsContainer.innerHTML = "";
-      qualitySelect.innerHTML = '<option value="-1">Auto</option>';
-      qualitySelect.disabled = true;
-    }
-
-    function renderLevels(levels) {
-      clearLevels();
-      qualitySelect.disabled = false;
-
-      levels.forEach((level, index) => {
-        const label = level.height ? `${level.height}p` : `Level ${index}`;
-        const option = document.createElement("option");
-        option.value = String(index);
-        option.textContent = label;
-        qualitySelect.appendChild(option);
-
-        const chip = document.createElement("div");
-        chip.className = "chip";
-        chip.textContent = `${label} • ${Math.round((level.bitrate || 0) / 1000)} kbps`;
-        levelsContainer.appendChild(chip);
-      });
-    }
-
+ 
     function destroyPlayer() {
+      if (player) {
+        player.destroy();
+        player = null;
+      }
       if (hls) {
         hls.destroy();
         hls = null;
       }
       video.removeAttribute("src");
       video.load();
-      clearLevels();
+    }
+ 
+    function updateQuality(newQuality) {
+      if (!hls) return;
+      if (newQuality === 0) {
+        hls.currentLevel = -1; // -1 is Auto in hls.js
+        setStatus("Switched to Auto quality.");
+      } else {
+        // Find the index of the level that matches the selected height
+        hls.levels.forEach((level, levelIndex) => {
+          if (level.height === newQuality) {
+            hls.currentLevel = levelIndex;
+            setStatus(`Requested ${newQuality}p quality.`);
+          }
+        });
+      }
     }
 
     function loadWithHlsJs(url) {
@@ -215,73 +173,78 @@
         capLevelToPlayerSize: false,
         startLevel: -1
       });
-
+ 
       hls.loadSource(url);
       hls.attachMedia(video);
-
+ 
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        renderLevels(hls.levels);
-        setStatus(`Loaded manifest with ${data.levels.length} quality levels. Default mode is Auto.`);
+        // 1. Extract available resolutions (heights) from the manifest
+        const availableQualities = hls.levels.map(l => l.height);
+        availableQualities.unshift(0); // Prepend 0 to represent 'Auto'
+
+        // 2. Initialize Plyr and pass in our custom quality options
+        player = new Plyr(video, {
+          controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'],
+          settings: ['quality'],
+          quality: {
+            default: 0, // Auto
+            options: availableQualities,
+            forced: true,
+            onChange: (e) => updateQuality(e)
+          },
+          i18n: {
+            qualityLabel: { 0: 'Auto' }
+          }
+        });
+
+        setStatus(`Loaded manifest with ${data.levels.length} quality levels. Click the Gear icon ⚙️ in the player.`);
         video.play().catch(() => {});
       });
-
+ 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
         const current = data.level;
         const label = current >= 0 && hls.levels[current] ? `${hls.levels[current].height}p` : "Auto";
         setStatus(`Current playback quality: ${label}`);
       });
-
+ 
       hls.on(Hls.Events.ERROR, (_, data) => {
         setStatus(`HLS error: ${data.type} / ${data.details}`);
       });
     }
-
+ 
     function loadStream() {
       const url = manifestUrlInput.value.trim();
       if (!url) {
         setStatus("Enter a master manifest URL first.");
         return;
       }
-
+ 
       destroyPlayer();
-
+ 
       if (window.Hls && Hls.isSupported()) {
         loadWithHlsJs(url);
         return;
       }
-
+ 
+      // Fallback for native HLS (like Safari on iOS) where manual selection isn't allowed via JS
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
+        player = new Plyr(video); // Init basic Plyr without custom quality configs
         video.addEventListener("loadedmetadata", () => {
-          setStatus("Loaded with native HLS playback. Manual quality switching is usually not exposed by native browser controls.");
+          setStatus("Loaded with native HLS playback. Quality is managed automatically by your browser.");
         }, { once: true });
+        video.play().catch(() => {});
         return;
       }
-
+ 
       setStatus("This browser cannot play HLS in this test page.");
     }
-
+ 
     loadButton.addEventListener("click", loadStream);
-
-    qualitySelect.addEventListener("change", () => {
-      if (!hls) {
-        setStatus("Manual quality switching needs hls.js in this demo.");
-        return;
-      }
-
-      const selected = Number(qualitySelect.value);
-      hls.currentLevel = selected;
-      if (selected === -1) {
-        setStatus("Switched to Auto quality.");
-      } else {
-        const level = hls.levels[selected];
-        setStatus(`Requested ${level.height}p quality.`);
-      }
-    });
-
+ 
     if (manifestUrlInput.value) {
       loadStream();
     }
-  </script>
+</script>
 </body>
 </html>
