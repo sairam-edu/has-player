@@ -95,7 +95,7 @@
 <div class="page">
   <div class="card">
     <h1>HLS Quality Demo</h1>
-    <p>This version dynamically updates the Plyr "Auto" setting label to show the exact resolution currently being pulled by HLS.js.</p>
+    <p>This version includes the bug fix to ensure switching back to "Auto" mode from a manual selection works flawlessly.</p>
  
     <div class="row">
       <div class="field">
@@ -150,21 +150,17 @@
       video.load();
     }
 
-    // NEW: Function to dynamically update the Plyr DOM elements
     function updateAutoLabel(height) {
       if (!player || !hls) return;
       
       const isAuto = hls.autoLevelEnabled;
-      // If Auto is selected, append the height. Otherwise, just say "Auto"
       const newText = (isAuto && height) ? `Auto (${height}p)` : 'Auto';
       
-      // 1. Update the option inside the settings sub-menu
       const autoOptionSpan = document.querySelector('.plyr__control[data-plyr="quality"][value="0"] span');
       if (autoOptionSpan) {
         autoOptionSpan.textContent = newText;
       }
       
-      // 2. Update the main settings menu value (next to the word "Quality")
       if (isAuto) {
         const qualityMenuValue = document.querySelector('.plyr__control--forward[data-plyr="quality"] .plyr__menu__value');
         if (qualityMenuValue) {
@@ -175,18 +171,22 @@
  
     function updateQuality(newQuality) {
       if (!hls) return;
-      if (newQuality === 0) {
+      
+      // FIX: Force the incoming value to act as a Number so the strict check doesn't fail
+      const qualityNumber = Number(newQuality);
+      
+      if (qualityNumber === 0) {
         hls.currentLevel = -1; 
         setStatus("Switched to Auto quality.");
-        updateAutoLabel(null); // Instantly reset label while waiting for stream to adjust
+        updateAutoLabel(null); 
       } else {
         hls.levels.forEach((level, levelIndex) => {
-          if (level.height === newQuality) {
+          if (level.height === qualityNumber) {
             hls.currentLevel = levelIndex;
-            setStatus(`Requested ${newQuality}p quality.`);
+            setStatus(`Requested ${qualityNumber}p quality.`);
           }
         });
-        updateAutoLabel(null); // Clear the dynamic text if manual mode is chosen
+        updateAutoLabel(null); 
       }
     }
 
@@ -232,7 +232,6 @@
         
         setStatus(`Current playback quality: ${label}`);
         
-        // Trigger the label update every time HLS dynamically shifts resolution
         if (levelInfo) {
           updateAutoLabel(levelInfo.height);
         }
