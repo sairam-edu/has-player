@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HLS Quality Demo (Mobile Optimized)</title>
+  <title>HLS Video Player</title>
   
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
   
@@ -79,7 +79,6 @@
     .video-container {
       margin-top: 16px;
       border-radius: 16px;
-      /* Removed overflow: hidden as it can sometimes pinch Android fullscreen */
       background: #000;
       --plyr-color-main: var(--accent);
     }
@@ -96,7 +95,7 @@
 <div class="page">
   <div class="card">
     <h1>HLS Quality Demo</h1>
-    <p>This version includes mobile device detection to route iOS and Android devices to their optimal fullscreen and PiP handlers.</p>
+    <p>This version dynamically updates the Plyr "Auto" setting label to show the exact resolution currently being pulled by HLS.js.</p>
  
     <div class="row">
       <div class="field">
@@ -150,12 +149,36 @@
       video.removeAttribute("src");
       video.load();
     }
+
+    // NEW: Function to dynamically update the Plyr DOM elements
+    function updateAutoLabel(height) {
+      if (!player || !hls) return;
+      
+      const isAuto = hls.autoLevelEnabled;
+      // If Auto is selected, append the height. Otherwise, just say "Auto"
+      const newText = (isAuto && height) ? `Auto (${height}p)` : 'Auto';
+      
+      // 1. Update the option inside the settings sub-menu
+      const autoOptionSpan = document.querySelector('.plyr__control[data-plyr="quality"][value="0"] span');
+      if (autoOptionSpan) {
+        autoOptionSpan.textContent = newText;
+      }
+      
+      // 2. Update the main settings menu value (next to the word "Quality")
+      if (isAuto) {
+        const qualityMenuValue = document.querySelector('.plyr__control--forward[data-plyr="quality"] .plyr__menu__value');
+        if (qualityMenuValue) {
+          qualityMenuValue.textContent = newText;
+        }
+      }
+    }
  
     function updateQuality(newQuality) {
       if (!hls) return;
       if (newQuality === 0) {
         hls.currentLevel = -1; 
         setStatus("Switched to Auto quality.");
+        updateAutoLabel(null); // Instantly reset label while waiting for stream to adjust
       } else {
         hls.levels.forEach((level, levelIndex) => {
           if (level.height === newQuality) {
@@ -163,6 +186,7 @@
             setStatus(`Requested ${newQuality}p quality.`);
           }
         });
+        updateAutoLabel(null); // Clear the dynamic text if manual mode is chosen
       }
     }
 
@@ -194,7 +218,6 @@
             onChange: (e) => updateQuality(e)
           },
           i18n: { qualityLabel: { 0: 'Auto' } },
-          // Crucial fix for Mobile:
           fullscreen: { iosNative: true }
         });
 
@@ -204,8 +227,15 @@
  
       hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
         const current = data.level;
-        const label = current >= 0 && hls.levels[current] ? `${hls.levels[current].height}p` : "Auto";
+        const levelInfo = hls.levels[current];
+        const label = current >= 0 && levelInfo ? `${levelInfo.height}p` : "Auto";
+        
         setStatus(`Current playback quality: ${label}`);
+        
+        // Trigger the label update every time HLS dynamically shifts resolution
+        if (levelInfo) {
+          updateAutoLabel(levelInfo.height);
+        }
       });
  
       hls.on(Hls.Events.ERROR, (_, data) => {
@@ -222,27 +252,24 @@
  
       destroyPlayer();
 
-      // Accurately detect iOS devices (including iPads that pretend to be Macs)
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                     (navigator.userAgent.includes("Mac") && "ontouchend" in document);
  
-      // Only run HLS.js if it's supported AND the device is NOT an Apple mobile device
       if (window.Hls && Hls.isSupported() && !isIOS) {
         loadWithHlsJs(url);
         return;
       }
  
-      // Native Apple Fallback
       if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
         
         player = new Plyr(video, { 
             controls: plyrControls,
-            fullscreen: { iosNative: true } // Let iPhone use its native fullscreen
+            fullscreen: { iosNative: true }
         }); 
 
         video.addEventListener("loadedmetadata", () => {
-          setStatus("Loaded with Apple native playback. Quality and PiP are managed by your OS.");
+          setStatus("Loaded with Apple native playback. Quality is fully automated by OS.");
         }, { once: true });
         video.play().catch(() => {});
         return;
