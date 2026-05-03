@@ -37,48 +37,41 @@
     p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
     .input-group { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
     input {
-      flex: 1;
-      min-width: 300px;
-      padding: 12px 16px;
-      border-radius: 10px;
-      border: 1px solid var(--border);
-      font-size: 14px;
-      transition: all 0.2s;
+      flex: 1; min-width: 300px; padding: 12px 16px; border-radius: 10px;
+      border: 1px solid var(--border); font-size: 14px; transition: all 0.2s;
     }
-    input:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
-    }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2); }
     button {
-      padding: 12px 24px;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: 10px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.1s, opacity 0.2s;
+      padding: 12px 24px; background: var(--accent); color: white; border: none;
+      border-radius: 10px; font-weight: 600; cursor: pointer; transition: transform 0.1s;
     }
-    button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
+
     .video-wrapper {
+      position: relative;
       border-radius: 12px;
       overflow: hidden;
       background: #000;
       aspect-ratio: 16 / 9;
     }
-    .status-bar {
-      margin-top: 16px;
-      padding: 12px;
-      background: #f1f5f9;
-      border-radius: 8px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 12px;
-      color: var(--muted);
-      display: flex;
-      justify-content: space-between;
+    /* Fixed Loader Z-Index */
+    .loader-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      justify-content: center;
       align-items: center;
+      z-index: 5; /* Sit above video but below Plyr UI if needed */
+      color: white;
+      backdrop-filter: blur(8px);
+    }
+    .loader-overlay.active { display: flex; }
+
+    .status-bar {
+      margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 8px;
+      font-family: monospace; font-size: 12px; color: var(--muted); 
+      display: flex; justify-content: space-between;
     }
   </style>
 </head>
@@ -88,21 +81,22 @@
   <div class="card">
     <div class="header">
       <h1>Pro HLS Player</h1>
-      <p>Adaptive Streaming with Memory Leak Protection</p>
+      <p>Clean Lifecycle Management</p>
     </div>
 
     <div class="input-group">
-      <input id="manifestUrl" type="text" placeholder="Paste .m3u8 URL here..." value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" />
+      <input id="manifestUrl" type="text" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" />
       <button id="loadButton">Load Stream</button>
     </div>
 
     <div class="video-wrapper">
+      <div id="loader" class="loader-overlay">Initializing Stream...</div>
       <video id="video" crossorigin playsinline></video>
     </div>
 
     <div class="status-bar">
-      <span id="status-text">Ready to stream</span>
-      <span id="quality-info" style="font-weight: 600; color: var(--accent);"></span>
+      <span id="status-text">Ready</span>
+      <span id="quality-info" style="color: var(--accent); font-weight: bold;"></span>
     </div>
   </div>
 </div>
@@ -111,82 +105,64 @@
 <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
 <script>
+  let hls = null;
+  let player = null;
+  let loadTimeout = null;
+
   const UI = {
     input: document.getElementById("manifestUrl"),
     btn: document.getElementById("loadButton"),
-    video: document.getElementById("video"),
     status: document.getElementById("status-text"),
-    quality: document.getElementById("quality-info")
+    quality: document.getElementById("quality-info"),
+    loader: document.getElementById("loader")
   };
-
-  let hls = null;
-  let player = null;
-  let loadTimeout = null; // Track timeout for cleanup
 
   function updateStatus(msg, isError = false) {
     UI.status.textContent = msg;
     UI.status.style.color = isError ? "#ef4444" : "";
   }
 
-  function syncAutoLabel(height) {
-    if (!player || !hls) return;
-    const isAuto = hls.autoLevelEnabled;
-    const label = (isAuto && height) ? `Auto (${height}p)` : 'Auto';
-    const autoOption = document.querySelector('.plyr__control[data-plyr="quality"][value="0"] span');
-    if (autoOption) autoOption.textContent = label;
-    if (isAuto) {
-      const currentValDisplay = document.querySelector('.plyr__control--forward[data-plyr="quality"] .plyr__menu__value');
-      if (currentValDisplay) currentValDisplay.textContent = label;
-    }
+  function setLoader(active) {
+    active ? UI.loader.classList.add('active') : UI.loader.classList.remove('active');
   }
 
   function destroyCurrent() {
-    // 1. Clear any pending UI state timeouts
-    if (loadTimeout) {
-      clearTimeout(loadTimeout);
-      loadTimeout = null;
+    if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+    
+    if (hls) {
+      hls.detachMedia();
+      hls.stopLoad();
+      hls.destroy();
+      hls = null;
     }
 
-    // 2. Destroy Plyr (automatically removes its own listeners)
     if (player) {
       player.destroy();
       player = null;
     }
 
-    // 3. Destroy Hls.js
-    if (hls) {
-      hls.detachMedia(); // Detach from video element first
-      hls.stopLoad();    // Stop any active fragment downloads
-      hls.destroy();
-      hls = null;
+    // Crucial: Get the video element fresh after Plyr might have modified the DOM
+    const videoElem = document.getElementById("video");
+    if (videoElem) {
+      videoElem.pause();
+      videoElem.src = "";
+      videoElem.load();
+      videoElem.removeAttribute("src");
+      videoElem.onplaying = null;
     }
-
-    // 4. Reset video element and wipe inline event handlers
-    UI.video.pause();
-    UI.video.src = "";
-    UI.video.load();
-    UI.video.removeAttribute("src");
-    UI.video.onloadedmetadata = null;
-    UI.video.onerror = null;
-
-    updateStatus("Resetting player...");
+    
+    updateStatus("Cleaning sessions...");
   }
 
-  function setupHls(url) {
-    hls = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-      backBufferLength: 90
-    });
-
+  function setupHls(url, videoElem) {
+    hls = new Hls({ enableWorker: true, lowLatencyMode: true });
     hls.loadSource(url);
-    hls.attachMedia(UI.video);
+    hls.attachMedia(videoElem);
 
     hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
       const levels = hls.levels.map(l => l.height);
       
-      player = new Plyr(UI.video, {
-        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'pip', 'fullscreen'],
+      player = new Plyr(videoElem, {
         settings: ['quality', 'speed'],
         quality: {
           default: 0,
@@ -194,77 +170,66 @@
           forced: true,
           onChange: (newQual) => {
             const val = Number(newQual);
-            if (val === 0) {
-              hls.currentLevel = -1;
-              updateStatus("Quality: Auto Mode");
-            } else {
-              hls.currentLevel = hls.levels.findIndex(l => l.height === val);
-              updateStatus(`Quality: Locked ${val}p`);
-            }
-            syncAutoLabel(null);
+            hls.currentLevel = (val === 0) ? -1 : hls.levels.findIndex(l => l.height === val);
           }
-        },
-        i18n: { qualityLabel: { 0: 'Auto' } }
+        }
       });
 
-      updateStatus(`Manifest loaded. ${levels.length} quality levels found.`);
-      UI.video.play().catch(() => updateStatus("Autoplay blocked. Tap play."));
+      updateStatus(`Streaming: ${levels.length} quality levels`);
+      
+      // DISMISS LOADER ONLY WHEN VIDEO ACTUALLY STARTS SHOWING FRAMES
+      videoElem.onplaying = () => {
+        setLoader(false);
+        updateStatus("Playback active");
+      };
+
+      videoElem.play().catch(() => {
+        setLoader(false); // Dismiss if autoplay fails so user can click play
+        updateStatus("Click Play to start");
+      });
     });
 
     hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
       const level = hls.levels[data.level];
-      if (level) {
-        UI.quality.textContent = `${level.width}x${level.height}`;
-        syncAutoLabel(level.height);
-      }
+      if (level) UI.quality.textContent = `${level.height}p`;
     });
 
     hls.on(Hls.Events.ERROR, (event, data) => {
       if (data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hls.startLoad();
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          hls.recoverMediaError();
-        } else {
-          destroyCurrent();
-          updateStatus("Fatal error. Reloading required.", true);
-        }
+        setLoader(false);
+        updateStatus("Stream Error", true);
+        destroyCurrent();
       }
     });
   }
 
   function handleLoad() {
     const url = UI.input.value.trim();
-    if (!url) return updateStatus("Invalid URL", true);
+    if (!url) return;
 
     UI.btn.disabled = true;
+    setLoader(true);
     destroyCurrent();
+
+    // Re-query the video element after destruction
+    const videoElem = document.getElementById("video");
 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
                   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    const nativeHls = UI.video.canPlayType('application/vnd.apple.mpegurl');
 
     if (Hls.isSupported() && !isIOS) {
-      setupHls(url);
-    } else if (nativeHls) {
-      UI.video.src = url;
-      player = new Plyr(UI.video, { controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'] });
-      updateStatus("Native Safari Mode");
-    } else {
-      updateStatus("HLS Not Supported", true);
+      setupHls(url, videoElem);
+    } else if (videoElem.canPlayType('application/vnd.apple.mpegurl')) {
+      videoElem.src = url;
+      player = new Plyr(videoElem);
+      videoElem.onplaying = () => setLoader(false);
+      videoElem.play();
     }
 
-    // Stored in a variable so destroyCurrent() can clear it if needed
-    loadTimeout = setTimeout(() => { 
-      UI.btn.disabled = false; 
-      loadTimeout = null; 
-    }, 600);
+    loadTimeout = setTimeout(() => { UI.btn.disabled = false; }, 1000);
   }
 
   UI.btn.addEventListener("click", handleLoad);
-
-  const startSrc = new URLSearchParams(window.location.search).get('src');
-  if (startSrc) { UI.input.value = startSrc; handleLoad(); }
 </script>
 
 </body>
