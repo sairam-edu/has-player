@@ -4,233 +4,284 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HLS Video Player</title>
+  
   <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  
   <style>
     :root {
-      --bg: #f8fafc;
+      color-scheme: light;
+      --bg: #f4f7fb;
       --surface: #ffffff;
-      --text: #1e293b;
-      --muted: #64748b;
-      --accent: #0ea5e9;
-      --border: #e2e8f0;
-      --plyr-color-main: var(--accent);
+      --text: #123047;
+      --muted: #5f7181;
+      --accent: #0e7a86;
+      --border: #d7e2ea;
     }
+ 
+    * { box-sizing: border-box; }
+ 
     body {
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-      background-color: var(--bg);
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #eef5fb 0%, #f8fbfd 100%);
       color: var(--text);
-      display: flex;
-      justify-content: center;
-      padding: 40px 20px;
     }
-    .container { width: 100%; max-width: 850px; }
+ 
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+ 
     .card {
       background: var(--surface);
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
       border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(18, 48, 71, 0.08);
     }
-    .header { margin-bottom: 24px; }
-    h1 { margin: 0; font-size: 24px; font-weight: 700; }
-    p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
-    .input-group { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-    input {
-      flex: 1; min-width: 300px; padding: 12px 16px; border-radius: 10px;
-      border: 1px solid var(--border); font-size: 14px; transition: all 0.2s;
+ 
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+ 
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
     }
-    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2); }
-    button {
-      padding: 12px 24px; background: var(--accent); color: white; border: none;
-      border-radius: 10px; font-weight: 600; cursor: pointer; transition: transform 0.1s;
-    }
-    button:disabled { opacity: 0.6; cursor: not-allowed; }
-
-    .video-wrapper {
-      position: relative;
+ 
+    .field { flex: 1 1 420px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+ 
+    input, button {
+      width: 100%;
       border-radius: 12px;
-      overflow: hidden;
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      font-size: 14px;
+      background: #fff;
+    }
+ 
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+ 
+    .button-field {
+      flex: 0 0 180px;
+      align-self: end;
+    }
+ 
+    .video-container {
+      margin-top: 16px;
+      border-radius: 16px;
       background: #000;
-      aspect-ratio: 16 / 9;
+      --plyr-color-main: var(--accent);
     }
-    /* Fixed Loader Z-Index */
-    .loader-overlay {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: none;
-      justify-content: center;
-      align-items: center;
-      z-index: 5; /* Sit above video but below Plyr UI if needed */
-      color: white;
-      backdrop-filter: blur(8px);
-    }
-    .loader-overlay.active { display: flex; }
 
-    .status-bar {
-      margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 8px;
-      font-family: monospace; font-size: 12px; color: var(--muted); 
-      display: flex; justify-content: space-between;
+    .status {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--muted);
+      white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
-
-<div class="container">
+<div class="page">
   <div class="card">
-    <div class="header">
-      <h1>Pro HLS Player</h1>
-      <p>Clean Lifecycle Management</p>
+    <h1>HLS Quality Demo</h1>
+    <p>This version includes the bug fix to ensure switching back to "Auto" mode from a manual selection works flawlessly.</p>
+ 
+    <div class="row">
+      <div class="field">
+        <label for="manifestUrl">HLS master manifest URL</label>
+        <input id="manifestUrl" type="text" placeholder="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" />
+      </div>
+      <div class="button-field">
+        <label>&nbsp;</label>
+        <button id="loadButton" type="button">Load Stream</button>
+      </div>
     </div>
-
-    <div class="input-group">
-      <input id="manifestUrl" type="text" value="https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8" />
-      <button id="loadButton">Load Stream</button>
+ 
+    <div class="video-container">
+      <video id="video" controls playsinline></video>
     </div>
-
-    <div class="video-wrapper">
-      <div id="loader" class="loader-overlay">Initializing Stream...</div>
-      <video id="video" crossorigin playsinline></video>
-    </div>
-
-    <div class="status-bar">
-      <span id="status-text">Ready</span>
-      <span id="quality-info" style="color: var(--accent); font-weight: bold;"></span>
-    </div>
+    
+    <div class="status" id="status">Idle</div>
   </div>
 </div>
-
+ 
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js"></script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 
 <script>
-  let hls = null;
-  let player = null;
-  let loadTimeout = null;
-
-  const UI = {
-    input: document.getElementById("manifestUrl"),
-    btn: document.getElementById("loadButton"),
-    status: document.getElementById("status-text"),
-    quality: document.getElementById("quality-info"),
-    loader: document.getElementById("loader")
-  };
-
-  function updateStatus(msg, isError = false) {
-    UI.status.textContent = msg;
-    UI.status.style.color = isError ? "#ef4444" : "";
-  }
-
-  function setLoader(active) {
-    active ? UI.loader.classList.add('active') : UI.loader.classList.remove('active');
-  }
-
-  function destroyCurrent() {
-    if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
-    
-    if (hls) {
-      hls.detachMedia();
-      hls.stopLoad();
-      hls.destroy();
-      hls = null;
+    const manifestUrlInput = document.getElementById("manifestUrl");
+    const loadButton = document.getElementById("loadButton");
+    const video = document.getElementById("video");
+    const status = document.getElementById("status");
+ 
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("src")) {
+      manifestUrlInput.value = params.get("src");
+    }
+ 
+    let hls = null;
+    let player = null; 
+ 
+    function setStatus(message) {
+      status.textContent = message;
+    }
+ 
+    function destroyPlayer() {
+      if (player) {
+        player.destroy();
+        player = null;
+      }
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
+      video.removeAttribute("src");
+      video.load();
     }
 
-    if (player) {
-      player.destroy();
-      player = null;
-    }
-
-    // Crucial: Get the video element fresh after Plyr might have modified the DOM
-    const videoElem = document.getElementById("video");
-    if (videoElem) {
-      videoElem.pause();
-      videoElem.src = "";
-      videoElem.load();
-      videoElem.removeAttribute("src");
-      videoElem.onplaying = null;
-    }
-    
-    updateStatus("Cleaning sessions...");
-  }
-
-  function setupHls(url, videoElem) {
-    hls = new Hls({ enableWorker: true, lowLatencyMode: true });
-    hls.loadSource(url);
-    hls.attachMedia(videoElem);
-
-    hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-      const levels = hls.levels.map(l => l.height);
+    function updateAutoLabel(height) {
+      if (!player || !hls) return;
       
-      player = new Plyr(videoElem, {
-        settings: ['quality', 'speed'],
-        quality: {
-          default: 0,
-          options: [0, ...levels],
-          forced: true,
-          onChange: (newQual) => {
-            const val = Number(newQual);
-            hls.currentLevel = (val === 0) ? -1 : hls.levels.findIndex(l => l.height === val);
+      const isAuto = hls.autoLevelEnabled;
+      const newText = (isAuto && height) ? `Auto (${height}p)` : 'Auto';
+      
+      const autoOptionSpan = document.querySelector('.plyr__control[data-plyr="quality"][value="0"] span');
+      if (autoOptionSpan) {
+        autoOptionSpan.textContent = newText;
+      }
+      
+      if (isAuto) {
+        const qualityMenuValue = document.querySelector('.plyr__control--forward[data-plyr="quality"] .plyr__menu__value');
+        if (qualityMenuValue) {
+          qualityMenuValue.textContent = newText;
+        }
+      }
+    }
+ 
+    function updateQuality(newQuality) {
+      if (!hls) return;
+      
+      // FIX: Force the incoming value to act as a Number so the strict check doesn't fail
+      const qualityNumber = Number(newQuality);
+      
+      if (qualityNumber === 0) {
+        hls.currentLevel = -1; 
+        setStatus("Switched to Auto quality.");
+        updateAutoLabel(null); 
+      } else {
+        hls.levels.forEach((level, levelIndex) => {
+          if (level.height === qualityNumber) {
+            hls.currentLevel = levelIndex;
+            setStatus(`Requested ${qualityNumber}p quality.`);
           }
+        });
+        updateAutoLabel(null); 
+      }
+    }
+
+    const plyrControls = [
+      'play-large', 'play', 'progress', 'current-time', 
+      'mute', 'volume', 'settings', 'pip', 'fullscreen' 
+    ];
+
+    function loadWithHlsJs(url) {
+      hls = new Hls({
+        capLevelToPlayerSize: false,
+        startLevel: -1
+      });
+ 
+      hls.loadSource(url);
+      hls.attachMedia(video);
+ 
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        const availableQualities = hls.levels.map(l => l.height);
+        availableQualities.unshift(0); 
+
+        player = new Plyr(video, {
+          controls: plyrControls,
+          settings: ['quality'],
+          quality: {
+            default: 0, 
+            options: availableQualities,
+            forced: true,
+            onChange: (e) => updateQuality(e)
+          },
+          i18n: { qualityLabel: { 0: 'Auto' } },
+          fullscreen: { iosNative: true }
+        });
+
+        setStatus(`Loaded manifest with ${data.levels.length} quality levels.`);
+        video.play().catch(() => {});
+      });
+ 
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+        const current = data.level;
+        const levelInfo = hls.levels[current];
+        const label = current >= 0 && levelInfo ? `${levelInfo.height}p` : "Auto";
+        
+        setStatus(`Current playback quality: ${label}`);
+        
+        if (levelInfo) {
+          updateAutoLabel(levelInfo.height);
         }
       });
-
-      updateStatus(`Streaming: ${levels.length} quality levels`);
-      
-      // DISMISS LOADER ONLY WHEN VIDEO ACTUALLY STARTS SHOWING FRAMES
-      videoElem.onplaying = () => {
-        setLoader(false);
-        updateStatus("Playback active");
-      };
-
-      videoElem.play().catch(() => {
-        setLoader(false); // Dismiss if autoplay fails so user can click play
-        updateStatus("Click Play to start");
+ 
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        setStatus(`HLS error: ${data.type} / ${data.details}`);
       });
-    });
-
-    hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-      const level = hls.levels[data.level];
-      if (level) UI.quality.textContent = `${level.height}p`;
-    });
-
-    hls.on(Hls.Events.ERROR, (event, data) => {
-      if (data.fatal) {
-        setLoader(false);
-        updateStatus("Stream Error", true);
-        destroyCurrent();
-      }
-    });
-  }
-
-  function handleLoad() {
-    const url = UI.input.value.trim();
-    if (!url) return;
-
-    UI.btn.disabled = true;
-    setLoader(true);
-    destroyCurrent();
-
-    // Re-query the video element after destruction
-    const videoElem = document.getElementById("video");
-
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    if (Hls.isSupported() && !isIOS) {
-      setupHls(url, videoElem);
-    } else if (videoElem.canPlayType('application/vnd.apple.mpegurl')) {
-      videoElem.src = url;
-      player = new Plyr(videoElem);
-      videoElem.onplaying = () => setLoader(false);
-      videoElem.play();
     }
+ 
+    function loadStream() {
+      const url = manifestUrlInput.value.trim();
+      if (!url) {
+        setStatus("Enter a master manifest URL first.");
+        return;
+      }
+ 
+      destroyPlayer();
 
-    loadTimeout = setTimeout(() => { UI.btn.disabled = false; }, 1000);
-  }
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                    (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+ 
+      if (window.Hls && Hls.isSupported() && !isIOS) {
+        loadWithHlsJs(url);
+        return;
+      }
+ 
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        
+        player = new Plyr(video, { 
+            controls: plyrControls,
+            fullscreen: { iosNative: true }
+        }); 
 
-  UI.btn.addEventListener("click", handleLoad);
+        video.addEventListener("loadedmetadata", () => {
+          setStatus("Loaded with Apple native playback. Quality is fully automated by OS.");
+        }, { once: true });
+        video.play().catch(() => {});
+        return;
+      }
+ 
+      setStatus("This browser cannot play HLS in this test page.");
+    }
+ 
+    loadButton.addEventListener("click", loadStream);
+ 
+    if (manifestUrlInput.value) {
+      loadStream();
+    }
 </script>
-
 </body>
 </html>
